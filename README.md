@@ -4,13 +4,22 @@ This project features a **5 Degrees of Freedom (5DOF) robotic arm** designed to 
 
 ## 📌 Project Overview
 
-- **Control System**: The robotic arm is controlled via Jetson Xavier NX, using information received from a remote computer.
+This project demonstrates a **5 Degrees of Freedom (5DOF) robotic arm** system capable of automatically **picking up objects** within its workspace and **sorting them into three boxes** based on predefined criteria (e.g. color, size, shape).
+
+- **Hardware-Agnostic Design**:  
+  The system is designed to run on **any Ubuntu-based embedded device** that supports ROS 2, such as Raspberry Pi, NVIDIA Jetson, or other SBCs. This makes it portable and adaptable to different hardware platforms.  
+  In this implementation, we use a **Jetson Xavier NX** as an example of the embedded device.
+
 - **Distributed Vision Processing**:  
-  - Jetson captures live images from the camera and sends them to a remote computer over **ROS 2**.
-  - The computer performs **object detection** and **coordinate extraction** using YOLOv8 Segmentation.
-  - The computed object position is sent back to Jetson, which controls the robotic arm to **pick and place** the object into the appropriate box.
-- **Object Sorting**: Based on detected object class or location, items are sorted into **three designated boxes**.
-- **Automation**: The system runs fully autonomously after being launched via ROS 2 nodes.
+  - The embedded device captures live images from a connected camera and publishes them via **ROS 2**.
+  - A remote computer subscribes to the image stream and performs **object detection** and **coordinate extraction** using YOLOv8 Segmentation.
+  - The computed object coordinates are sent back to the embedded device, which then controls the robotic arm to **pick and place** the object into the appropriate box.
+
+- **Object Sorting**:  
+  Based on the detected object class or position, items are sorted into **three designated boxes**.
+
+- **Full Automation**:  
+  The system runs autonomously once all ROS 2 nodes are launched.
 
 ## 🧰 Technologies Used
 
