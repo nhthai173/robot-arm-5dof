@@ -69,6 +69,53 @@ This project demonstrates a **5 Degrees of Freedom (5DOF) robotic arm** system c
   - Used to write ROS 2 nodes, detection scripts, and robotic control logic
 
 
+## 🔸 Objects Used in Sorting Task
+
+In this project, we use **three distinct objects** for detection and sorting. Each object is recognized and classified using the YOLOv8 Segmentation model based on its **visual color and shape characteristics**.
+
+| Object Name | Description           | Appearance                                               |
+| ----------- | --------------------- | -------------------------------------------------------- |
+| `Do`        | Red-colored object    | <img width="100px" src="image/README/1744559456207.png"> |
+| `Vang`      | Yellow-colored object | <img width="100px" src="image/README/1744559402935.png"> |
+| `Cam`       | Orange-colored object | <img width="100px" src="image/README/1744559484590.png"> |
+
+- Each object has been **manually labeled** during dataset preparation to ensure detection accuracy.
+- The objects are placed randomly in the workspace and the robotic arm identifies, picks, and sorts them into the corresponding box based on their label.
+
+
+## 🔁 ROS 2 Communication Flow
+
+The system uses **ROS 2** to handle distributed communication between the embedded device (e.g., Jetson Xavier NX) and the remote computer. This section explains the structure of the message flow and topics involved.
+
+### 🧩 Node Architecture
+
+*TODO: update the image*
+
+### 📡 ROS 2 Topics
+
+#### 1. `image`
+
+Jetson send raw image to PC
+
+- Jetson: [cam_pub](./src/cam_pub/)
+- PC: [cam_detect](./src/cam_detect/)
+
+#### 2. `control`
+
+PC detected object and send the coordinate to Jetson. Example data:
+
+```json
+{
+    "name": "Vang",
+    "x": 10.02,
+    "y": -2.12
+}
+```
+
+- PC: [cam_detect](./src/cam_detect/)
+- Jetson: [arm_control](./src/arm_control/)
+
+
 ## 🎯 Object Positioning in Workspace
 
 To accurately control the robotic arm for object picking, we compute the **coordinates of each object relative to a known origin point** within the camera’s view.
