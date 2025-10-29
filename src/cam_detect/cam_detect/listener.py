@@ -9,6 +9,7 @@ from .Detect import *
 import numpy as np
 import os
 import json
+from time import time
 
 os.environ['ROS_DOMAIN_ID'] = '173'
 os.environ['RMW_IMPLEMENTATION'] = 'rmw_fastrtps_cpp'
@@ -20,8 +21,13 @@ class ImageSubscriber(Node):
         super().__init__(name)
         self.sub = self.create_subscription(Image, 'image', self.listener_callback, 1)
         self.publisher_ = self.create_publisher(String, 'control', 1)
+        self.timer = self.create_timer(1, self.timer_callback)
         self.cv_bridge = CvBridge()
         self.model = YOLO('best.pt')
+        self.detected = False
+        self.ready = True
+        self.last_position = None
+        self.last_time = time()
         
         # Màu cho mask của các đối tượng
         self.colors = {
@@ -33,9 +39,13 @@ class ImageSubscriber(Node):
             'Vang': (255, 255, 255),
         }
 
+    def timer_callback(self):
+        if time() - self.last_time > 8:
+            self.detected = True
+
     def yolo_detect(self, image):
         original_height, original_width = image.shape[:2]
-        results = self.model(image, conf=0.5, verbose=False)
+        results = self.model(image, conf=0.7, verbose=False)
         annotated_frame = image.copy()
 
         result = results[0]
@@ -64,10 +74,23 @@ class ImageSubscriber(Node):
                 if name is not None and name in ['Cam', 'Do', 'Vang']:
                     draw_contours(annotated_frame, object['mask'], object['color'], True)
                     display_object(annotated_frame, object)
-                    x, y = get_coordinate(goc, object, annotated_frame)
-                    x = np.round(x/100, 2) # mm sang m
-                    y = np.round(y/100, 2)
-                    send_data.append({'name': name, 'x': x, 'y': y})
+                    coor = get_coordinate(goc, object, annotated_frame)
+                    if coor is not None:
+                        x, y = coor
+                        x = np.round(x/100, 2) # mm sang m
+                        y = np.round(y/100, 2)
+                        if self.detected == True:
+                            self.detected = False
+                            self.ready = False
+                            self.last_time = time()
+                            self.get_logger().info(f'last_position: {self.last_position}, current_position: {name, x, y}')
+                            if self.last_position is None or (self.last_position[0] != name or self.last_position[1] != x or self.last_position[2] != y):   
+                                self.last_position = (name, x, y)
+                                send_data.append({'name': name, 'x': x, 'y': y})
+                        elif self.ready == True:
+                            self.detected = True
+                            self.get_logger().info(f'Delay 1')
+                    break
 
         cv2.imshow('Camera Feed', annotated_frame)
         cv2.waitKey(1)

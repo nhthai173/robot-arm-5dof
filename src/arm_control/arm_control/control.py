@@ -7,9 +7,47 @@ import numpy as np
 from .RARM_5DOF import RARM
 from time import sleep
 
+
 os.environ['ROS_DOMAIN_ID'] = '173'
 os.environ['RMW_IMPLEMENTATION'] = 'rmw_fastrtps_cpp'
 os.environ['ROS_LOCALHOST_ONLY'] = '0'
+
+
+def vang_offset(x, y):
+    x_offset = 0.5
+    y_offset = -0.5
+    if (y >= 3):
+        x_offset -= 0.5
+        if (x >= 15):
+            x_offset -= 0.5
+    if (y <= -1.9):
+        x_offset += 1
+        if (x <= 16):
+            x_offset += 0.5
+        if (x <= 11):
+            x_offset += 0.5
+    return x_offset, y_offset
+
+def do_offset(x, y):
+    x_offset = 0.8
+    y_offset = 0
+    if (y >= 3):
+        if (x <= 13):
+            x_offset += 0.5
+    if (y <= -1.9):
+        x_offset += 1
+        if (x <= 16):
+            x_offset += 0.5
+        if (x <= 13):
+            x_offset += 0.5
+    return x_offset, y_offset
+
+def cam_offset(x, y):
+    x_offset = 0
+    y_offset = 0.5
+    if (y <= -1.9):
+        x_offset += 1
+    return x_offset, y_offset
 
 class ArmControl(Node):
 
@@ -49,42 +87,38 @@ class ArmControl(Node):
                 'max_angle': np.radians(90)
             },
         ]
-
-        self.arm = RARM(port='/dev/ttyACM0',
-                        channel=['9', '16', '19', '22', '24'],
-                        length=[14, 12, 9, 14])
+        self.arm = RARM(channel=['9', '16', '19', '22', '24'], length=[14, 12, 9, 14])
         self.arm.set_limit(self.limit)
         self.dang_gap = False
+        self.last_position = None
 
         # ARM config
-        self.ban_dau = (10, 0, 30)
+        self.ban_dau = (10, 4, 30)
         self.khe_1 = (33, -4, 16)
         self.khe_2 = (33, 3, 16)
         self.khe_3 = (32, 12, 16)
         self.offset = {
             'Vang': {
-                'x': 5,
-                'y': -0.5,
-                'g': 800
+                'xy': vang_offset,
+                'g': 800,
             },
             'Do': {
-                'x': 5.6,
-                'y': 0,
-                'g': 750
+                'xy': do_offset,
+                'g': 700,
             },
             'Cam': {
-                'x': 5,
-                'y': 0.5,
-                'g': 900
+                'xy': cam_offset,
+                'g': 900,
             }
         }
+
         self.home()
 
-        self.subscription = self.create_subscription(
-            String, 'control', self.listener_callback, 1)
+        self.subscription = self.create_subscription(String, 'control', self.listener_callback, 1)
         self.subscription  # prevent unused variable warning
 
     def listener_callback(self, msg):
+        self.get_logger().info('I heard: "%s"' % msg.data)
         data = json.loads(msg.data)
         if data and len(data) > 0:
             if self.dang_gap:
@@ -95,14 +129,17 @@ class ArmControl(Node):
                 x = obj.get('x', None)
                 y = obj.get('y', None)
                 if name and x and y:
-                    self.get_logger().info(f'{name} at ({x}, {y})')
-                    if name == 'Vang':
-                        self.gap(x, y, name, self.khe_3)
-                    elif name == 'Do':
-                        self.gap(x, y, name, self.khe_2)
-                    elif name == 'Cam':
-                        self.gap(x, y, name, self.khe_1)
-        self.get_logger().info('I heard: "%s"' % msg.data)
+                    self.get_logger().info(f'last_position: {self.last_position}, current: {name}, {x}, {y}')
+                    if self.last_position is None or (self.last_position['name'] != name or self.last_position['x'] != x or self.last_position['y'] != y):
+                        self.last_position = obj
+                        self.dang_gap = True
+                        self.get_logger().info(f'{name} at ({x}, {y})')
+                        if name == 'Vang':
+                            self.gap(x, y, name, self.khe_3)
+                        elif name == 'Do':
+                            self.gap(x, y, name, self.khe_2)
+                        elif name == 'Cam':
+                            self.gap(x, y, name, self.khe_1)
 
     def home(self):
         print("Going Home!")
@@ -111,19 +148,18 @@ class ArmControl(Node):
         sleep(0.5)
 
     def gap(self, x, y, name, slot):
-        self.dang_gap = True
         print(f'Đang gắp tại {x}, {y}')
 
-        x_offset = self.offset[name].get('x', 0)
-        y_offset = self.offset[name].get('y', 0)
+        x_offset, y_offset = self.offset[name]['xy'](x, y)
         g = self.offset[name].get('g', 800)
         theta = np.radians(-60)
-        x_raw = x
+        # theta = np.radians(0)
+        x_raw = x + 5
         x = x-2
-        x += 1
-        y -= 3
+        y -= 4
         y *= -1
-        self.arm.gotoXYZ(x, y + y_offset, 6, theta, gripper=450)
+        print(f"X: {x_raw}, Y: {y}")
+        self.arm.gotoXYZ(x, y + y_offset, 6, theta, gripper=450, time=1000)
         sleep(0.5)
         self.arm.gotoXYZ(x_raw + x_offset, y + y_offset, 5, theta, gripper=450)
         sleep(0.5)

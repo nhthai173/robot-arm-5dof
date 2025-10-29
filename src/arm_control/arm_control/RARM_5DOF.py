@@ -9,7 +9,6 @@ class RARM:
         Args:
             port (str, optional): Defaults to '/dev/ttyACM0' for jetson(ubuntu) or 'COMx' for windows.
             channel (list, optional): Defaults to ['9', '16', '19', '22', '24'].
-            length (list, optional): Defaults to [14, 12, 9, 14].
         """
         self.limit = [{}, {}, {}, {}, {}]
         self.port = port
@@ -24,13 +23,6 @@ class RARM:
             self.serial.open()
 
     def set_channel(self, channel):
-        """
-        Set the channel for the servos.
-        Args:
-            channel (list): A list of 5 elements representing the channels for the servos.
-        Returns:
-            None
-        """
         if channel is None:
             return
         if len(channel) != 5:
@@ -38,13 +30,6 @@ class RARM:
         self.channel = channel
 
     def set_port(self, port):
-        """
-        Set the port for the serial connection.
-        Args:
-            port (str): The port to set.
-        Returns:
-            None
-        """
         if port is None:
             return
         self.port = port
@@ -53,13 +38,6 @@ class RARM:
         self.serial = Serial(port = self.port, baudrate = 115200, parity = PARITY_NONE, stopbits = STOPBITS_ONE, bytesize = EIGHTBITS, timeout = 1)
 
     def set_length(self, length):
-        """
-        Set the lengths of the robot arm segments.
-        Args:
-            length (list): A list of 4 elements representing the lengths of the arm segments.
-        Returns:
-            None
-        """
         if length is None:
             return
         if len(length) != 4:
@@ -71,13 +49,6 @@ class RARM:
         self.l4 = length[3]
 
     def set_limit(self, limit):
-        """
-        Set the limits for each servo.
-        Args:
-            limit (list): A list of 5 dictionaries, each containing 'min_pwm', 'min_angle', 'max_pwm', and 'max_angle'.
-        Returns:
-            None
-        """
         if limit is None:
             return
         if len(limit) != 5:
@@ -140,7 +111,10 @@ class RARM:
         theta2 = phi - beta
 
         theta4 = theta - (theta2 + theta3)
-                
+        
+        if not (-np.pi <= theta2 <= np.pi) or not (-np.pi <= theta3 <= np.pi) or not (-np.pi <= theta4 <= np.pi):
+            raise ValueError("Joint angles out of range")
+        
         print(f"IK: theta1={np.degrees(theta1):.2f}, theta2={np.degrees(theta2):.2f}, "
             f"theta3={np.degrees(theta3):.2f}, theta4={np.degrees(theta4):.2f}")
         return theta1, theta2, theta3, theta4
@@ -161,22 +135,11 @@ class RARM:
         sleep(time/1000)
         sleep(1e-3)
 
-    def gotoXYZ(self, x, y, z, theta = -np.pi/4, gripper=500, elbow_config = 'down'):
-        """
-        Move the robot arm to the specified position.
-        Args:
-            x (float): X coordinate.
-            y (float): Y coordinate.
-            z (float): Z coordinate.
-            theta (float, optional): Orientation angle in radians.
-            gripper (int, optional): Gripper Servo PWM. Defaults to 500.
-            elbow_config (str, optional): Elbow configuration ('up' or 'down'). Defaults to 'down'.
-        """
-        if theta < -np.pi or theta > np.pi:
-            theta = np.radians(theta)
+    def gotoXYZ(self, x, y, z, theta = -np.pi/4, gripper=500, elbow_config = 'down', time=500):
+        # t1, t2, t3, t4 = self._inverse_kinematics(x, y, z, np.radians(theta), elbow_config)
         t1, t2, t3, t4 = self._inverse_kinematics(x, y, z, theta, elbow_config)
         p1, p2, p3, p4 = self._angle_to_pwm(0, t1), self._angle_to_pwm(1, t2), self._angle_to_pwm(2, t3), self._angle_to_pwm(3, t4)
         print(f"PWM: p1={p1}, p2={p2}, p3={p3}, p4={p4}")
-        self.setPos([p1, p2, p3, p4, gripper])
+        self.setPos([p1, p2, p3, p4, gripper], time=time)
 
     
