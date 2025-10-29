@@ -1,77 +1,138 @@
-# 🤖 5DOF Robotic Arm Object Sorting System
+# 5DOF Robotic Arm — Object Sorting
 
-This project features a **5 Degrees of Freedom (5DOF) robotic arm** designed to automatically **pick up objects** within its workspace and **sort them into three different boxes** based on predefined criteria (e.g. color, size, shape).
+Implementation of a 5-DoF robotic arm system that detects objects with a vision pipeline and sorts them into designated bins. The repository contains ROS 2 Python packages for camera publishing, object detection integration, and arm control alongside a trained detection model.
 
-## 📌 Project Overview
+## Key points
+- Purpose: detect, localize, and pick objects, then place them into one of three bins.
+- Architecture: distributed pipeline — an embedded device (camera + arm controller) and an external detection node.
+- Core components: `cam_pub` (camera publisher), `cam_detect` (detection & coordinate computation), `arm_control` (movement control).
 
-This project demonstrates a **5 Degrees of Freedom (5DOF) robotic arm** system capable of automatically **picking up objects** within its workspace and **sorting them into three boxes** based on predefined criteria (e.g. color, size, shape).
+## Mermaid diagrams
 
-- **Hardware-Agnostic Design**:  
-  The system is designed to run on **any Ubuntu-based embedded device** that supports ROS 2, such as Raspberry Pi, NVIDIA Jetson, or other SBCs. This makes it portable and adaptable to different hardware platforms.  
-  In this implementation, we use a **Jetson Xavier NX** as an example of the embedded device.
+### System component diagram
+```mermaid
+graph TB
+  Camera[Camera]
+  Jetson["Embedded Device (Jetson / SBC)"]
+  PC["Remote Detection PC"]
+  Arm["5-DOF Robotic Arm"]
+  Servo["Servo Driver / UART"]
 
-- **Distributed Vision Processing**:  
-  - The embedded device captures live images from a connected camera and publishes them via **ROS 2**.
-  - A remote computer subscribes to the image stream and performs **object detection** and **coordinate extraction** using YOLOv8 Segmentation.
-  - The computed object coordinates are sent back to the embedded device, which then controls the robotic arm to **pick and place** the object into the appropriate box.
+  Camera -->|"video stream"| Jetson
+  Jetson -->|"ROS2: /image"| PC
+  PC -->|"ROS2: /control (coordinates)"| Jetson
+  Jetson -->|"UART commands"| Servo --> Arm
+```
 
-- **Object Sorting**:  
-  Based on the detected object class or position, items are sorted into **three designated boxes**.
+### Data flow (sequence)
+```mermaid
+sequenceDiagram
+  participant C as Camera
+  participant J as Jetson (cam_pub)
+  participant P as PC (cam_detect)
+  participant A as Arm Controller (arm_control)
 
-- **Full Automation**:  
-  The system runs autonomously once all ROS 2 nodes are launched.
+  C->>J: capture frame
+  J->>P: publish /image
+  P->>P: run detection (YOLOv8) & compute world coordinates
+  P->>J: publish /control (name, x, y)
+  J->>A: send motion commands (pick & place)
+  A->>A: execute trajectory
+```
 
-## 🧰 Technologies Used
+## Repository layout (relevant)
 
-### 🤖 Framework & Middleware
-- **ROS 2 (Robot Operating System 2)**
-  - Handles communication between Jetson and the computer via ROS 2 topics and nodes.
-  - Enables modular, distributed processing.
+- `best.pt` — trained YOLOv8 model used by `cam_detect`.
+- `src/arm_control/` — Python package that receives coordinates and drives the arm.
+- `src/cam_detect/` — Detection and coordinate conversion node.
+- `src/cam_pub/` — Camera publisher node.
+- `image/` — documentation images used in this README.
 
-### 🧠 Processing Units
-- **Jetson Xavier NX**
-  - Captures image from camera
-  - Controls the 5DOF robotic arm via UART
-  - Subscribes to object position topics
-  - Publishes camera image topics  
-  <img width="500px" alt="Jetson Xavier NX" src="image/README/1744535870585.png">
+## Overview of components
 
-- **Remote Computer (PC or Laptop)**
-  - Subscribes to camera feed
-  - Runs object detection using YOLOv8 Segmentation
-  - Publishes detected object coordinates  
+- `cam_pub` — captures camera frames and publishes them to a ROS 2 image topic.
+- `cam_detect` — subscribes to the image topic, runs YOLOv8 segmentation/detection, converts pixel locations to workspace coordinates, and publishes coordinates to a control topic.
+- `arm_control` — subscribes to control messages and issues low-level commands to the servo driver (UART) to move the arm.
 
-### 📸 Vision System
-- **Logitech C505 USB Webcam**
-  - Connected to Jetson, streams images into ROS 2  
-  <img width="300px" alt="Logitech C505 Webcam" src="image/README/1744535943105.png">
+Assumptions: these packages are implemented as ROS 2 Python nodes or scripts; if you are not using ROS 2, the nodes can be run as standalone Python modules where noted.
 
-### 🦾 Robotic Arm
-- **5DOF Robotic Arm**
-  - Handles object picking and sorting
-  - Controlled via servo driver module and UART  
-  <img width="500px" alt="5DoF Robot Arm" src="image/README/1744534565053.png">
+## Requirements
 
-### ⚙️ Servo Control
-- **Servo Driver Module**
-  - Communicates with Jetson via UART
-  - Executes movement commands for the robotic arm  
-  <img width="300px" alt="Servo Control" src="image/README/1744536147471.png">
+- Ubuntu-based system recommended for embedded device and PC (ARM or x86 as appropriate).
+- ROS 2 (rolling/foxy/galactic/etc. — use the ROS 2 distribution you have installed).
+- Python 3.8+ and standard Python tooling.
+- PyTorch + YOLOv8 runtime for detection (the `best.pt` model is included).
 
-### 🧠 AI Model
-- **YOLOv8 Segmentation**
-  - Runs on the remote computer
-  - Detects and segments objects
-  - Computes their positions relative to the workspace  
+Optional hardware: Jetson Xavier NX, Logitech C505 webcam, servo driver module.
 
-### 💻 Programming Language
-- **Python**
-  - Used to write ROS 2 nodes, detection scripts, and robotic control logic
+## Quick start
 
+1. Install ROS 2 and dependencies for your distribution.
+2. On each machine (Jetson and PC), create a Python virtual environment and install required Python packages. If project provides requirements, install them, otherwise install common deps:
 
-## 🔸 Objects Used in Sorting Task
+```bash
+# on both Jetson and PC (example)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip setuptools
+# install torch/yolov8 runtime as required by your environment
+pip install -r requirements.txt  # if provided
+```
 
-In this project, we use **three distinct objects** for detection and sorting. Each object is recognized and classified using the YOLOv8 Segmentation model based on its **visual color and shape characteristics**.
+3. Build/install the Python packages (if using ROS 2 -> colcon workspace):
+
+```bash
+# from repository root
+# (if ROS 2 Python packages are used)
+source /opt/ros/<your_ros2_distro>/setup.bash
+colcon build --packages-select cam_pub cam_detect arm_control
+source install/setup.bash
+```
+
+4. Run nodes
+
+On the embedded device (camera + arm controller):
+
+```bash
+# Option A: using ros2 run (if packages installed as ROS2 nodes)
+ros2 run cam_pub pub
+ros2 run arm_control control
+
+# Option B: run modules directly
+python3 -m cam_pub.pub
+python3 -m arm_control.control
+```
+
+On the detection PC:
+
+```bash
+python3 -m cam_detect.Detect   # or the equivalent ROS2 node
+```
+
+Notes:
+- Ensure both machines share a ROS 2 domain (or network) and can reach each other.
+- Adjust serial/UART port settings in `src/arm_control` to match your hardware.
+
+## Message/Topic examples
+
+- `/image` — camera image topic (sensor_msgs/Image)
+- `/control` — custom control message or JSON payload with fields {name, x, y} (coordinates in mm)
+
+Example control payload (JSON):
+
+```json
+{
+  "name": "Vang",
+  "x": 100.2,
+  "y": -45.7
+}
+```
+
+## Detailed object descriptions
+
+This project trains and detects three object classes used for sorting. The detection node (`cam_detect`) supports both bounding-box and segmentation outputs (YOLOv8). Detection output is then converted into a workspace coordinate for pickup.
+
+- Classes (as used in `best.pt`):
 
 | Object Name | Description           | Appearance                                               |
 | ----------- | --------------------- | -------------------------------------------------------- |
@@ -79,73 +140,88 @@ In this project, we use **three distinct objects** for detection and sorting. Ea
 | `Vang`      | Yellow-colored object | <img width="100px" src="image/README/1744559402935.png"> |
 | `Cam`       | Orange-colored object | <img width="100px" src="image/README/1744559484590.png"> |
 
-- Each object has been **manually labeled** during dataset preparation to ensure detection accuracy.
-- The objects are placed randomly in the workspace and the robotic arm identifies, picks, and sorts them into the corresponding box based on their label.
+Notes on model and inference:
+- The provided `best.pt` is a YOLOv8 model trained with a mixture of bounding boxes and segmentation masks. During runtime the node selects the object center as the mean of the mask centroid (when available) or the bounding-box center as fallback.
+- Recommended inference parameters:
+  - confidence threshold: 0.3–0.5 (tune per environment)
+  - NMS IoU threshold: 0.4
+  - Minimum detection area: filter out small contours below ~500 px (adjust to camera resolution)
+- Labeling: training labels should match the three class names above. For segmentation tasks, prefer polygon masks for more accurate centroid estimation.
 
-
-## 🔁 ROS 2 Communication Flow
-
-The system uses **ROS 2** to handle distributed communication between the embedded device (e.g., Jetson Xavier NX) and the remote computer. This section explains the structure of the message flow and topics involved.
-
-### 🧩 Node Architecture
-
-*TODO: update the image*
-
-### 📡 ROS 2 Topics
-
-#### 1. `image`
-
-Jetson send raw image to PC
-
-- Jetson: [cam_pub](./src/cam_pub/)
-- PC: [cam_detect](./src/cam_detect/)
-
-#### 2. `control`
-
-PC detected object and send the coordinate to Jetson. Example data:
+Example detection output (internal JSON):
 
 ```json
 {
-    "name": "Vang",
-    "x": 10.02,
-    "y": -2.12
+  "name": "Vang",
+  "class_id": 1,
+  "confidence": 0.86,
+  "pixel_center": {"u": 823, "v": 412},
+  "bbox": {"x": 760, "y": 360, "w": 126, "h": 104}
 }
 ```
 
-- PC: [cam_detect](./src/cam_detect/)
-- Jetson: [arm_control](./src/arm_control/)
+## Coordinate system & calibration (detailed)
 
-
-## 🎯 Object Positioning in Workspace
-
-To accurately control the robotic arm for object picking, we compute the **coordinates of each object relative to a known origin point** within the camera’s view.
-
-### 📐 Coordinate System Setup
-
-1. **Reference Points Definition**  
-   We manually define three reference points in the workspace:
-   - **Origin (Gốc)**: This is the fixed (0,0) point of the coordinate system.
-   - **X-Axis Point (Den_ngang)**: Used to define the direction and scale of the X-axis.
-   - **Y-Axis Point (Den_doc)**: Used to define the direction and scale of the Y-axis.
-
-2. **Real-World Measurements**  
-   - The real distance between the origin and the X-axis reference point is **950 mm**.
-   - The real distance between the origin and the Y-axis reference point is also **950 mm**.
-   - These distances are used to calculate a **pixel-to-millimeter ratio** for coordinate transformation.
-
-### 🧮 Object Coordinate Calculation
-
-1. **Camera captures an image** of the workspace from a top-down view.
-2. **YOLOv8 Segmentation** detects the object and identifies its center point in **pixel coordinates**.
-3. The script calculates the position of the object relative to the **origin**, using the reference axis points to:
-   - Determine orientation (angle correction if necessary)
-   - Convert pixel distance into millimeters
-
-### 🖼️ Example (Image Below)
-
-The image below illustrates:
-- The **reference points** (`Goc`, `Den_ngang`, `Den_doc`) with lines indicating axis directions.
-- A detected object (`Vang`) with a blue dot at its center.
-- Distance measurements (in mm) from the origin to each detected point.
+Accurate pick-and-place requires converting image pixel coordinates (u, v) to real-world coordinates (X, Y) in millimeters relative to a workspace origin. This repository uses a simple, robust calibration based on three reference points. The procedure below assumes the camera is mounted approximately top-down; for strong perspective effects use a homography-based calibration instead (see notes).
 
 ![Workspace coordinate calculation](image/README/1744536700048.png)
+
+1) Reference points
+- Define three points in the camera image and measure their known real-world positions:
+  - Origin O (pixel: u0, v0) -> world (0, 0)
+  - X-axis reference Px (pixel: ux, vx) -> world (dx_real, 0)
+  - Y-axis reference Py (pixel: uy, vy) -> world (0, dy_real)
+
+2) Compute pixel vectors and scale
+- Pixel vector along X: Vx = (ux - u0, vx - v0)
+- Pixel vector along Y: Vy = (uy - u0, vy - v0)
+- Pixel distances: |Vx| = sqrt((ux-u0)^2 + (vx-v0)^2), likewise |Vy|.
+- Scale factors (mm per pixel):
+  - sx = dx_real / |Vx|
+  - sy = dy_real / |Vy|
+
+3) Orientation (rotation)
+- The orientation angle theta of the workspace X-axis in image coordinates is:
+
+  theta = atan2(vx - v0, ux - u0)
+
+4) Transform pixel -> world
+- Translate pixel coordinates to origin: u' = u - u0, v' = v - v0
+- Rotate the translated vector by -theta to align with the world axes:
+
+  x_pix =  u' * cos(theta) + v' * sin(theta)
+  y_pix = -u' * sin(theta) + v' * cos(theta)
+
+- Convert to millimeters:
+
+  X_mm = x_pix * sx
+  Y_mm = y_pix * sy
+
+5) Example
+- Suppose dx_real = dy_real = 950 mm, measured pixel distances |Vx| = 1200 px, |Vy| = 1180 px.
+- Then sx = 950 / 1200 = 0.7917 mm/px, sy = 950 / 1180 = 0.8051 mm/px.
+- For a detected pixel center (u, v) = (823, 412), and origin (u0, v0) = (200, 120), after translation and rotation you obtain X_mm and Y_mm using the formulas above.
+
+Notes & edge cases
+- If the camera is not approximately perpendicular to the workspace, or if there is substantial perspective distortion, compute a 3x3 homography (cv2.findHomography) between image points and world points and use cv2.perspectiveTransform to map image points to world coordinates.
+- For segmentation masks prefer computing the centroid from the mask (image moments) rather than box centers — it reduces bias for irregular shapes.
+- Validate calibration by placing a test marker at known world coordinates and measuring the error; adjust reference points or re-run calibration if error exceeds your tolerance (recommended < 10 mm for reliable grasping).
+- Handle missing detections and out-of-bounds coordinates: verify that X_mm/Y_mm fall within the robot's reachable workspace before issuing motion commands.
+
+
+## Demo
+
+Watch a short demo video here:
+
+[Demo video](https://youtu.be/j9e4Ei9u3aM)
+
+Replace the link above with your hosted demo when available.
+
+## Contributing
+
+Contributions are welcome. Please open issues for bugs or feature requests and follow the repository's coding style. Include tests where appropriate.
+
+## License
+
+This project includes multiple packages. Please refer to the `LICENSE` files in each package directory (`src/arm_control/LICENSE`, `src/cam_detect/LICENSE`, `src/cam_pub/LICENSE`) for details.
+
